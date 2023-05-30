@@ -2,7 +2,7 @@
 from abc import ABC
 
 from langchain.llms.base import LLM
-from typing import Optional, List
+from typing import Any, List, Mapping, Optional
 from models.loader import LoaderCheckPoint
 from models.base import (BaseAnswer,
                          AnswerResult,
@@ -10,7 +10,15 @@ from models.base import (BaseAnswer,
                          AnswerResultQueueSentinelTokenListenerQueue)
 
 
+from langchain.callbacks.manager import CallbackManagerForLLMRun
+
 import transformers
+
+from transformers import AutoTokenizer, AutoModel
+
+tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
+model = AutoModel.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True).half().cuda()
+model.eval()
 
 
 class ChatGLM(BaseAnswer, LLM, ABC):
@@ -19,7 +27,7 @@ class ChatGLM(BaseAnswer, LLM, ABC):
     top_p = 0.9
     checkPoint: LoaderCheckPoint = None
     # history = []
-    history_len: int = 10
+    history_len: int = 3
 
     def __init__(self, checkPoint: LoaderCheckPoint = None):
         super().__init__()
@@ -40,8 +48,24 @@ class ChatGLM(BaseAnswer, LLM, ABC):
     def set_history_len(self, history_len: int = 10) -> None:
         self.history_len = history_len
 
-    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        pass
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+    ) -> str:
+        response, _ = model.chat(tokenizer, prompt, history=[], max_length=self.max_token, top_p=self.top_p, temperature=self.temperature)
+        return response
+    
+    @property
+    def _identifying_params(self) -> Mapping[str, Any]:
+        """Get the identifying parameters."""
+        return {"max_token": self.max_token,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "checkPoint": self.checkPoint,
+                "history_len": self.history_len}
+        
 
     def _generate_answer(self, prompt: str,
                          history: List[List[str]] = [],
